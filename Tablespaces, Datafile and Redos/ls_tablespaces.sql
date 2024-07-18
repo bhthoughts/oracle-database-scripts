@@ -15,8 +15,8 @@ SELECT
     tablespace_name,
     SUM(bytes / 1024 / 1024)                                   allocated_mb,
     SUM(maxbytes / 1024 / 1024)                                max_mb,
-    ( SUM(maxbytes / 1024 / 1024) - SUM(bytes / 1024 / 1024) ) free_mb,
-    round((SUM(bytes / 1024 / 1024) / SUM(maxbytes / 1024 / 1024)) * 100,
+    ( SUM(case when maxbytes>bytes then maxbytes else bytes end / 1024 / 1024) - SUM(bytes / 1024 / 1024) ) free_mb,
+    round((SUM(bytes / 1024 / 1024) / SUM(case when maxbytes>bytes then maxbytes else bytes end / 1024 / 1024)) * 100,
           2)                                                   "%_USED"
 FROM
     dba_data_files
