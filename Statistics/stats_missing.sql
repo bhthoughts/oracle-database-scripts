@@ -1,7 +1,8 @@
 -- -----------------------------------------------------------------------------------
--- Description: Checking missing statistics >= 12c
+-- Description: Checking missing statistics > 12c
 -- -----------------------------------------------------------------------------------
 
+SET PAGES 200 LIN 200
 SET COLSEP '|'
 
 COL STALE_STATS FOR A5
@@ -12,81 +13,80 @@ COL TABLE_NAME FOR A30
 COL OBJECT_TYPE FOR A20
 COL PARTITION_NAME FOR A30
 COL SUBPARTITION_NAME FOR A30
+COL SAPLE_SIZE FOR 999.999.999.999
 COL NUM_ROWS FOR 999.999.999.999
 COL BLOCKS FOR 999.999.999.999
 
 SELECT
-    stale_stats,
-    to_char(last_analyzed, 'DD-MON-YYYY HH24:mi:SS') last_analyzed,
-    stattype_locked,
-    owner,
-    table_name,
+    dba_tables.owner,
+    dba_tables.table_name,
     object_type,
     partition_name,
     subpartition_name,
-    num_rows,
-    blocks
+    dba_tables.sample_size,
+    dba_tables.num_rows,
+    dba_tables.last_analyzed,
+    stale_stats
 FROM
-    dba_tab_statistics s
-WHERE	
-    ( stale_stats = 'YES'
-      OR last_analyzed IS NULL )
-    AND owner IN (
+    dba_tables
+    LEFT OUTER JOIN dba_tab_statistics ON dba_tab_statistics.table_name = dba_tables.table_name
+                                          AND dba_tab_statistics.owner = dba_tables.owner
+WHERE
+        coalesce(dba_tables.sample_size, - 1) <> coalesce(dba_tables.num_rows, - 2)
+    AND dba_tab_statistics.stattype_locked IS NULL
+    AND dba_tables.owner NOT IN ( 'SYS', 'SYSTEM' )
+    AND coalesce(dba_tables.external, '') <> 'YES'
+    AND coalesce(dba_tables.temporary, '') <> 'Y'
+    AND dba_tables.table_name NOT LIKE 'DR$CS%'
+    AND ( dba_tab_statistics.stale_stats IS NULL
+          OR dba_tab_statistics.stale_stats = 'YES' )
+    AND NOT EXISTS (
         SELECT
-            username
+            1
         FROM
-            dba_users
+            dba_mview_logs
         WHERE
-            oracle_maintained = 'N'
+            dba_mview_logs.log_table = dba_tables.table_name
     )
-    AND stattype_locked IS NULL
 ORDER BY
-    num_rows DESC;
+    1,
+    2;
 
 -- -----------------------------------------------------------------------------------
--- Checking missing statistics < 12c
+-- Checking missing statistics <= 12c
 -- -----------------------------------------------------------------------------------
--- 
--- COL STALE_STATS FOR A5
--- COL LAST_ANALYZED FOR A20
--- COL STATTYPE_LOCKED FOR A15
--- COL OWNER FOR A15
--- COL TABLE_NAME FOR A30
--- COL OBJECT_TYPE FOR A20
--- COL PARTITION_NAME FOR A30
--- COL SUBPARTITION_NAME FOR A30
--- COL NUM_ROWS FOR 999.999.999.999
--- COL BLOCKS FOR 999.999.999.999
--- 
+
 -- SELECT
---     stale_stats,
---     to_char(last_analyzed, 'DD-MON-YYYY HH24:mi:SS') last_analyzed,
---     stattype_locked,
---     owner,
---     table_name,
+--     dba_tables.owner,
+--     dba_tables.table_name,
 --     object_type,
 --     partition_name,
 --     subpartition_name,
---     num_rows,
---     blocks
+--     dba_tables.sample_size,
+--     dba_tables.num_rows,
+--     dba_tables.last_analyzed,
+--     stale_stats
 -- FROM
---     dba_tab_statistics s
+--     dba_tables
+--     LEFT OUTER JOIN dba_tab_statistics ON dba_tab_statistics.table_name = dba_tables.table_name
+--                                           AND dba_tab_statistics.owner = dba_tables.owner
 -- WHERE
---     ( stale_stats = 'YES'
---       OR last_analyzed IS NULL )
---     AND owner NOT IN ( 'QS_CB', 'PERFSTAT', 'QS_ADM', 'PM', 'SH',
---                        'HR', 'OE', 'ODM_MTR', 'WKPROXY', 'ANONYMOUS',
---                        'OWNER', 'SYS', 'SYSTEM', 'SCOTT', 'SYSMAN',
---                        'XDB', 'DBSNMP', 'EXFSYS', 'OLAPSYS', 'MDSYS',
---                        'WMSYS', 'WKSYS', 'DMSYS', 'ODM', 'EXFSYS',
---                        'CTXSYS', 'LBACSYS', 'ORDPLUGINS', 'SQLTXPLAIN', 'OUTLN',
---                        'TSMSYS', 'XS$NULL', 'TOAD', 'STREAM', 'SPATIAL_CSW_ADMIN',
---                        'SPATIAL_WFS_ADMIN', 'SI_INFORMTN_SCHEMA', 'QS', 'QS_CBADM', 'QS_CS',
---                        'QS_ES', 'QS_OS', 'QS_WS', 'PA_AWR_USER', 'OWBSYS_AUDIT',
---                        'OWBSYS', 'ORDSYS', 'ORDDATA', 'ORACLE_OCM', 'MGMT_VIEW',
---                        'MDDATA', 'FLOWS_FILES', 'FLASHBACK', 'AWRUSER', 'APPQOSSYS',
---                        'APEX_PUBLIC_USER', 'APEX_030200', 'FLOWS_020100', 'AUDSYS', 'GSMADMIN_INTERNAL',
---                        'DVSYS', 'OJVMSYS', 'DBSFWUSER' )
---     AND stattype_locked IS NULL
+--         coalesce(dba_tables.sample_size, - 1) <> coalesce(dba_tables.num_rows, - 2)
+--     AND dba_tab_statistics.stattype_locked IS NULL
+--     AND dba_tables.owner NOT IN ( 'SYS', 'SYSTEM' )
+--     AND coalesce(dba_tables.temporary, '') <> 'Y'
+--     AND dba_tables.table_name NOT LIKE 'DR$CS%'
+--     AND ( dba_tab_statistics.stale_stats IS NULL
+--           OR dba_tab_statistics.stale_stats = 'YES' )
+--     AND NOT EXISTS (
+--         SELECT
+--             table_name
+--         FROM
+--             dba_external_tables ext
+--         WHERE
+--                 ext.owner = dba_tables.owner
+--             AND ext.table_name = dba_tables.table_name
+--     )
 -- ORDER BY
---     num_rows DESC;
+--     1,
+--     2;
