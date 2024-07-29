@@ -9,7 +9,8 @@ SET COLSEP '|'
 col gap_minutes for 99999999
 
 SELECT
-    round((arch.first_time - appl.first_time) * 24 * 60) gap_minutes
+    case when max_curlog.seq > max_transplog.seq+1 then 
+    round((arch.first_time - appl.first_time) * 24 * 60) else 0 end gap_minutes
 -- , ARCH.THREAD# "Thread", ARCH.SEQUENCE# "Last in Sequence", APPL.SEQUENCE# "Last Applied Sequence", (ARCH.SEQUENCE# - APPL.SEQUENCE#) "Difference"
 FROM
     -- Last sequence archived in Primary Database
@@ -43,11 +44,30 @@ FROM
         FROM
             v$archived_log a
         WHERE
-            applied = 'YES'
+            dest_id = (
+                SELECT
+                    dest_id
+                FROM
+                    v$archive_dest
+                WHERE
+                        target = 'STANDBY'
+                    AND status = 'VALID'
+            )
+            and applied = 'YES'
         GROUP BY
             thread#,
             dest_id
-    ) appl
+    ) appl,
+(select max(sequence#) seq from v$log) max_curlog ,
+(select max(sequence#) seq from v$archived_log where dest_id = (
+                SELECT
+                    dest_id
+                FROM
+                    v$archive_dest
+                WHERE
+                        target = 'STANDBY'
+                    AND status = 'VALID'
+            )and applied='YES') max_transplog
 WHERE
         arch.thread# = appl.thread#
     AND arch.dest_id = appl.dest_id
