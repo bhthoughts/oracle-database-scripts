@@ -5,22 +5,30 @@
 SET PAGES 200 LIN 200
 SET COLSEP '|'
 
-col tablespace_name for a30
-col allocated_mb for 99999999.99
-col max_mb for 99999999.99
-col free_mb for 99999999.99
-col "%_USED" for 999.99
+COLUMN used_pct FORMAT A11
 
-SELECT
-    tablespace_name,
-    SUM(bytes / 1024 / 1024)                                   allocated_mb,
-    SUM(maxbytes / 1024 / 1024)                                max_mb,
-    ( SUM(case when maxbytes>bytes then maxbytes else bytes end / 1024 / 1024) - SUM(bytes / 1024 / 1024) ) free_mb,
-    round((SUM(bytes / 1024 / 1024) / SUM(case when maxbytes>bytes then maxbytes else bytes end / 1024 / 1024)) * 100,
-          2)                                                   "%_USED"
-FROM
-    dba_data_files
-GROUP BY
-    tablespace_name
-ORDER BY
-    5 asc;
+SELECT tablespace_name,
+       size_mb,
+       free_mb,
+       max_size_mb,
+       max_free_mb,
+       TRUNC((max_free_mb/max_size_mb) * 100) AS free_pct,
+       RPAD(' '|| RPAD('X',ROUND((max_size_mb-max_free_mb)/max_size_mb*10,0), 'X'),11,'-') AS used_pct
+FROM   (
+        SELECT a.tablespace_name,
+               b.size_mb,
+               a.free_mb,
+               b.max_size_mb,
+               a.free_mb + (b.max_size_mb - b.size_mb) AS max_free_mb
+        FROM   (SELECT tablespace_name,
+                       TRUNC(SUM(bytes)/1024/1024) AS free_mb
+                FROM   dba_free_space
+                GROUP BY tablespace_name) a,
+               (SELECT tablespace_name,
+                       TRUNC(SUM(bytes)/1024/1024) AS size_mb,
+                       TRUNC(SUM(GREATEST(bytes,maxbytes))/1024/1024) AS max_size_mb
+                FROM   dba_data_files
+                GROUP BY tablespace_name) b
+        WHERE  a.tablespace_name = b.tablespace_name
+       )
+ORDER BY tablespace_name;
